@@ -17,9 +17,16 @@ public class GamePanel extends JPanel {
     private final Random rand = new Random();
     private final List<Cure> cures = new ArrayList<>();
     private int dayNightTick = 0;
+    private boolean paused = false;
+    
     public int getCureCount() {
-    return cures.size();
-}
+        return cures.size();
+    }
+    
+    public void setPaused(boolean paused) {
+        this.paused = paused;
+        repaint();
+    }
     public GamePanel() {
         setPreferredSize(new Dimension(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE));
         setupWorld();
@@ -213,11 +220,14 @@ public class GamePanel extends JPanel {
         for (Cure c : cures) {
             c.draw(g2, CELL_SIZE);
 }
-        drawCelestialBody(g2, t);
-        drawCelestialBody(g2, t);
-        drawEntities(g2);
-        drawNightOverlay(g2, t);
-    }
+drawCelestialBody(g2, t);
+drawCelestialBody(g2, t);
+drawEntities(g2);
+drawNightOverlay(g2, t);
+if (paused) {
+    drawPausedOverlay(g2);
+}
+}
 
     private void drawGrass(Graphics2D g2) {
         g2.setColor(new Color(86, 168, 74));
@@ -289,6 +299,24 @@ public class GamePanel extends JPanel {
             g2.setColor(new Color(10, 15, 50, alpha));
             g2.fillRect(0, 0, GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE);
         }
+    }
+
+    private void drawPausedOverlay(Graphics2D g2) {
+        int w = GRID_SIZE * CELL_SIZE;
+        int h = GRID_SIZE * CELL_SIZE;
+
+        g2.setColor(new Color(0, 0, 0, 130));
+        g2.fillRect(0, 0, w, h);
+
+        String text = "PAUSED";
+        g2.setFont(new Font("SansSerif", Font.BOLD, 36));
+        FontMetrics fm = g2.getFontMetrics();
+        int textWidth = fm.stringWidth(text);
+        int x = (w - textWidth) / 2;
+        int y = h / 2;
+
+        g2.setColor(Color.WHITE);
+        g2.drawString(text, x, y);
     }
 
     private void drawEntities(Graphics2D g2) {

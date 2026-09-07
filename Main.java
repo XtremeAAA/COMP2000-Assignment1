@@ -87,22 +87,25 @@ public class Main {
                 logicTimer.stop();
                 renderTimer.stop();
                 playButton.setText("Play");
+                gamePanel.setPaused(true);
             } else {
                 logicTimer.start();
                 renderTimer.start();
                 playButton.setText("Pause");
+                gamePanel.setPaused(false);
             }
             running[0] = !running[0];
         });
 
-        resetButton.addActionListener(e -> {
-            logicTimer.stop();
-            renderTimer.stop();
-            running[0] = false;
-            playButton.setText("Play");
-            gamePanel.resetEntities();
-            updateInfoLabel(infoLabel, gamePanel);
-        });
+    resetButton.addActionListener(e -> {
+    logicTimer.stop();
+    renderTimer.stop();
+    running[0] = false;
+    playButton.setText("Play");
+    gamePanel.setPaused(false);
+    gamePanel.resetEntities();
+    updateInfoLabel(infoLabel, gamePanel);
+    });
 
         closeButton.addActionListener(e -> frame.dispose());
 
