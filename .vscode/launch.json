@@ -6,10 +6,11 @@
     "configurations": [
         
         {
-            "type": "jdk",
+            "type": "java",
             "request": "launch",
             "name": "Launch Java App",
-            "mainClass": "Main"
+            "mainClass": "Main",
+            "classPaths": ["${workspaceFolder}/bin"]
         }
     ]
 }
