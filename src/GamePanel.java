@@ -6,6 +6,7 @@ import java.util.Random;
 import javax.swing.*;
 
 public class GamePanel extends JPanel {
+    private int dayCount = 1;
 
     private boolean gameOver = false;
     private String winnerText = "";
@@ -106,7 +107,7 @@ public class GamePanel extends JPanel {
 
     public void resetEntities() throws WorldSetupException {
         entities.clear();
-
+        dayCount = 1;
         int placed = 0;
         while (placed < 18) {
             Point p = findFreeCell(1000);
@@ -244,12 +245,19 @@ public class GamePanel extends JPanel {
 
     // Fast render tick: advances day/night and glides entities toward their targets
     public void tick() {
-        dayNightTick = (dayNightTick + 1) % DAY_LENGTH_TICKS;
-        for (Entity e : entities) {
-            e.updateRenderPosition(0.15);
-        }
-        repaint();
+    int prevTick = dayNightTick;
+    dayNightTick = (dayNightTick + 1) % DAY_LENGTH_TICKS;
+    
+    // dayNightTick =0 --> finish 1 day (day++)
+    if (dayNightTick < prevTick) {
+        dayCount++;
     }
+
+    for (Entity e : entities) {
+        e.updateRenderPosition(0.15);
+    }
+    repaint();
+}
 
     private boolean[][] computeBlockedGrid() {
         boolean[][] blocked = new boolean[GRID_SIZE][GRID_SIZE];
@@ -293,6 +301,18 @@ public class GamePanel extends JPanel {
     public int getZombieCount() {
         int count = 0;
         for (Entity e : entities) if (e instanceof Zombie) count++;
+        return count;
+    }
+
+    // Number of humans that are carrying a cure (doctors)
+    public int getDoctorCount() {
+        int count = 0;
+        for (Entity e : entities) {
+            if (e instanceof Human) {
+                Human h = (Human) e;
+                if (h.hasCure()) count++;
+            }
+        }
         return count;
     }
 
@@ -452,4 +472,7 @@ public class GamePanel extends JPanel {
         int statsWidth = statsFm.stringWidth(stats);
         g2.drawString(stats, (w - statsWidth) / 2, h / 2 + 24);
     }
+    public int getDayCount() {
+    return dayCount;
+}
 }

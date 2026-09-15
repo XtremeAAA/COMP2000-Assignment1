@@ -56,5 +56,9 @@ An:
 + added the fps vaiable starting from line 78 
 + fixed renterTimer
 + // Fast timer: smooth walking animation, day/night cycle, clock widget and //add an event for Slider are moved above the buttonBox
+[] Day added
++ updated in `GamePanel.java` in `public void tick(){}`
++ add line for Day in `Main.java`
+[] added the number of doctors
 Suraiya: 
 [] Pausing and end screen.
