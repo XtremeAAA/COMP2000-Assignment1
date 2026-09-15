@@ -2,7 +2,6 @@ import java.awt.*;
 import javax.swing.*;
 
 public class Main {
-
     public static void main(String[] args) {
         SwingUtilities.invokeLater(Main::createAndShowUI);
     }
@@ -47,7 +46,28 @@ public class Main {
             b.setMaximumSize(buttonSize);
             b.setAlignmentX(Component.CENTER_ALIGNMENT);
         }
+         // Fast timer: smooth walking animation, day/night cycle, clock widget
+        int[] fpsHolder = {60}; // cap the fps at 60
+        
+        JLabel fpsLabel = new JLabel("FPS: " + fpsHolder[0], SwingConstants.CENTER);
+        fpsLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
+        JSlider fpsSlider = new JSlider(10, 144, fpsHolder[0]); 
+        fpsSlider.setMaximumSize(new Dimension(180, 45));
+        fpsSlider.setAlignmentX(Component.CENTER_ALIGNMENT);
+        fpsSlider.setBackground(Color.WHITE);
+        Timer renderTimer = new Timer(1000 / fpsHolder[0], e -> {
+            gamePanel.tick();
+            clockIndicator.repaint();
+        });
+        //add an event for Slider
+        fpsSlider.addChangeListener(e -> {
+            fpsHolder[0] = fpsSlider.getValue();
+            fpsLabel.setText("FPS: " + fpsHolder[0]);
+            if (fpsHolder[0] > 0) {
+                renderTimer.setDelay(1000 / fpsHolder[0]); 
+            }
+        });
         JPanel buttonBox = new JPanel();
         buttonBox.setLayout(new BoxLayout(buttonBox, BoxLayout.Y_AXIS));
         buttonBox.setBorder(BorderFactory.createCompoundBorder(
@@ -59,6 +79,10 @@ public class Main {
         buttonBox.add(resetButton);
         buttonBox.add(Box.createVerticalStrut(8));
         buttonBox.add(closeButton);
+        buttonBox.add(fpsLabel);
+        buttonBox.add(Box.createVerticalStrut(4));
+        buttonBox.add(fpsSlider);
+        buttonBox.add(Box.createVerticalStrut(8));
 
         JPanel buttonWrapper = new JPanel(new FlowLayout(FlowLayout.CENTER));
         buttonWrapper.setBackground(Color.WHITE);
@@ -74,12 +98,6 @@ public class Main {
         frame.setLayout(new BorderLayout());
         frame.add(sidebar, BorderLayout.WEST);
         frame.add(layeredPane, BorderLayout.CENTER);
-
-        // Fast timer: smooth walking animation, day/night cycle, clock widget
-        Timer renderTimer = new Timer(16, e -> {
-            gamePanel.tick();
-            clockIndicator.repaint();
-        });
 
         final boolean[] running = {false};
         final Timer[] logicTimerHolder = new Timer[1];

@@ -53,8 +53,8 @@ Armak:
 
 An:
 [] Look into adding a FPS variable in `COMP2000-Assignment1/Main.java`
-
-Suraiya:
-[] Pausing and end screen
-
-----
++ added the fps vaiable starting from line 78 
++ fixed renterTimer
++ // Fast timer: smooth walking animation, day/night cycle, clock widget and //add an event for Slider are moved above the buttonBox
+Suraiya: 
+[] Pausing and end screen.
