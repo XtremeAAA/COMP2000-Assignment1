@@ -1,3 +1,11 @@
+// public void move(int gridWidth, int gridHeight, Entity[] allEntities, boolean[][] blocked) {
+//     if (hasCure) {
+//         ...
+//     }
+//     ...
+// }
+// private int clamp(int value, int min, int max) { ... }
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
