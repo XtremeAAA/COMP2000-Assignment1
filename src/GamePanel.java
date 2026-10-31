@@ -1,15 +1,24 @@
 import java.awt.*;
 import java.awt.geom.Ellipse2D;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
 import javax.swing.*;
 
 public class GamePanel extends JPanel {
+    private int dayCount = 1;
 
-    private boolean gameOver = false;
+    private boolean gameOver = false;          // simulation has reached its final state: step() stops
+    private boolean endScreenVisible = false;  // overlay is only shown a moment AFTER gameOver, so the
+                                               // final transformation is drawn first
+    private long gameOverAtNanos = 0;
+    private static final long END_SCREEN_DELAY_NANOS = 1_200_000_000L; // 1.2 seconds
     private String winnerText = "";
     private int curesUsedCount = 0;
+    private int infectionCount = 0;   // total humans turned into zombies this game
+    private int curedCount = 0;       // total zombies turned back into humans this game
 
     private static final int GRID_SIZE = 18;
     private static final int CELL_SIZE = 48;
@@ -42,9 +51,11 @@ public class GamePanel extends JPanel {
 
         if (getZombieCount() == 0) {
             gameOver = true;
+            gameOverAtNanos = System.nanoTime();
             winnerText = "Humans Win!";
         } else if (getHumanCount() == 0) {
             gameOver = true;
+            gameOverAtNanos = System.nanoTime();
             winnerText = "Zombies Win!";
         }
     }
@@ -86,6 +97,11 @@ public class GamePanel extends JPanel {
         return gameOver;
     }
 
+    // True once the end-of-game overlay is actually on screen (a short delay after isGameOver()).
+    public boolean isEndScreenVisible() {
+        return endScreenVisible;
+    }
+
     private boolean isBlocked(int col, int row) {
         for (Building b : buildings) {
             if (b.occupiesCell(col, row)) return true;
@@ -106,7 +122,7 @@ public class GamePanel extends JPanel {
 
     public void resetEntities() throws WorldSetupException {
         entities.clear();
-
+        dayCount = 1;
         int placed = 0;
         while (placed < 18) {
             Point p = findFreeCell(1000);
@@ -132,8 +148,11 @@ public class GamePanel extends JPanel {
         dayNightTick = 0;
         cureSpawnCounter = 0;
         gameOver = false;
+        endScreenVisible = false;
         winnerText = "";
         curesUsedCount = 0;
+        infectionCount = 0;
+        curedCount = 0;
         repaint();
     }
 
@@ -197,6 +216,7 @@ public class GamePanel extends JPanel {
             newHuman.syncRenderPosition(z.getRenderX(), z.getRenderY());
             entities.remove(z);
             entities.add(newHuman);
+            curedCount++;
         }
     }
 
@@ -212,12 +232,22 @@ public class GamePanel extends JPanel {
 
         // Phase 2: ask every entity where it WANTS to go.
         // Nobody actually moves yet. Everyone sees the same snapshot.
-        for (Entity e : entities) {
-            if (e instanceof Human) {
-                ((Human) e).setVisibleCures(cures);
-            }
-            e.move(GRID_SIZE, GRID_SIZE, snapshot, blocked);
-        }
+        // Giving humans their visible cures happens first, sequentially.
+        entities.stream()
+                .filter(e -> e instanceof Human)
+                .forEach(e -> ((Human) e).setVisibleCures(cures));
+
+        // The decisions themselves run as a parallel stream. This is thread-safe because:
+        //  - every entity only READS the shared snapshot, cures and blocked grid, none of
+        //    which change during this phase;
+        //  - every entity only WRITES its own nextX/nextY (via planPosition);
+        //  - PathFinder is static and allocates all its working data per call;
+        //  - WanderStrategy uses ThreadLocalRandom rather than one shared Random.
+        // forEach on a parallel stream finishes all tasks before returning, so Phase 3 sees
+        // every plan. The decisions don't depend on each other, so the result matches a
+        // sequential run.
+        Arrays.stream(snapshot).parallel()
+                .forEach(e -> e.move(GRID_SIZE, GRID_SIZE, snapshot, blocked));
 
         // Phase 3: apply plans. Two entities of the SAME class can't claim the same tile.
         // Zombies may still step onto humans (to infect), and cure-carriers may step onto zombies.
@@ -244,12 +274,26 @@ public class GamePanel extends JPanel {
 
     // Fast render tick: advances day/night and glides entities toward their targets
     public void tick() {
-        dayNightTick = (dayNightTick + 1) % DAY_LENGTH_TICKS;
-        for (Entity e : entities) {
-            e.updateRenderPosition(0.15);
-        }
-        repaint();
+    int prevTick = dayNightTick;
+    dayNightTick = (dayNightTick + 1) % DAY_LENGTH_TICKS;
+    
+    // dayNightTick =0 --> finish 1 day (day++)
+    if (dayNightTick < prevTick) {
+        dayCount++;
     }
+
+    for (Entity e : entities) {
+        e.updateRenderPosition(0.15);
+    }
+
+    // The game is over, but give the last transformation time to be drawn (the new zombie
+    // sprite on screen, sidebar already updated) before covering it with the end screen.
+    if (gameOver && !endScreenVisible
+            && System.nanoTime() - gameOverAtNanos >= END_SCREEN_DELAY_NANOS) {
+        endScreenVisible = true;
+    }
+    repaint();
+}
 
     private boolean[][] computeBlockedGrid() {
         boolean[][] blocked = new boolean[GRID_SIZE][GRID_SIZE];
@@ -262,39 +306,44 @@ public class GamePanel extends JPanel {
     }
 
     private void handleInfections() {
-        List<Entity> toConvert = new ArrayList<>();
-        for (Entity e : entities) {
-            if (e instanceof Zombie) {
-                for (Entity other : entities) {
-                    if (other instanceof Human && other.getX() == e.getX() && other.getY() == e.getY()) {
-                        Human h = (Human) other;
-                        if (!h.hasCure() && !toConvert.contains(other)) {
-                            toConvert.add(other);
-                        }
-                    }
-                }
-            }
-        }
-        for (Entity e : toConvert) {
-            Human h = (Human) e;
+        // For every zombie, find the humans standing on its tile. Humans holding a cure
+        // are immune, and distinct() stops a human sharing a tile with two zombies being
+        // converted twice. Encounter order matches the original nested loops.
+        List<Human> toConvert = entities.stream()
+                .filter(z -> z instanceof Zombie)
+                .flatMap(z -> entities.stream()
+                        .filter(other -> other instanceof Human
+                                && other.getX() == z.getX()
+                                && other.getY() == z.getY()))
+                .map(other -> (Human) other)
+                .filter(h -> !h.hasCure())
+                .distinct()
+                .collect(Collectors.toList());
+
+        for (Human h : toConvert) {
             Zombie newZombie = new Zombie(h);
             newZombie.syncRenderPosition(h.getRenderX(), h.getRenderY());
             entities.remove(h);
             entities.add(newZombie);
+            infectionCount++;
         }
     }
 
-    public int getHumanCount() {
-        int count = 0;
-        for (Entity e : entities) if (e instanceof Human) count++;
-        return count;
+    public int getInfectionCount() { return infectionCount; }
+
+    public int getCuredCount() { return curedCount; }
+
+    // One pass over the entities using the custom collector in WorldStats.
+    public WorldStats getStats() {
+        return entities.stream().collect(WorldStats.collector());
     }
 
-    public int getZombieCount() {
-        int count = 0;
-        for (Entity e : entities) if (e instanceof Zombie) count++;
-        return count;
-    }
+    public int getHumanCount()  { return getStats().getHumans(); }
+
+    public int getZombieCount() { return getStats().getZombies(); }
+
+    // Number of humans that are carrying a cure (doctors)
+    public int getDoctorCount() { return getStats().getDoctors(); }
 
     public double getDayProgress() {
         return dayNightTick / (double) DAY_LENGTH_TICKS;
@@ -320,7 +369,7 @@ public class GamePanel extends JPanel {
         drawEntities(g2);
         drawNightOverlay(g2, t);
 
-        if (gameOver) {
+        if (endScreenVisible) {
             drawEndScreen(g2);
         }
     }
@@ -452,4 +501,7 @@ public class GamePanel extends JPanel {
         int statsWidth = statsFm.stringWidth(stats);
         g2.drawString(stats, (w - statsWidth) / 2, h / 2 + 24);
     }
+    public int getDayCount() {
+    return dayCount;
+}
 }

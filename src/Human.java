@@ -1,4 +1,13 @@
+// public void move(int gridWidth, int gridHeight, Entity[] allEntities, boolean[][] blocked) {
+//     if (hasCure) {
+//         ...
+//     }
+//     ...
+// }
+// private int clamp(int value, int min, int max) { ... }
+
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 
@@ -63,16 +72,9 @@ public class Human extends Entity implements Infectable {
         return Math.abs(x - gridX) + Math.abs(y - gridY);
     } 
     private Cure findNearestCure() {
-        Cure nearest = null;
-        int bestDist = Integer.MAX_VALUE;
-        for (Cure c : visibleCures) {
-            int dist = distanceTo(c.getX(), c.getY());
-            if (dist < bestDist) {
-                bestDist = dist;
-                nearest = c;
-            }
-        }
-    return nearest;
+        return visibleCures.stream()
+                .min(Comparator.comparingInt(c -> distanceTo(c.getX(), c.getY())))
+                .orElse(null);
     }
     // public void move(int gridWidth, int gridHeight, Entity[] allEntities, boolean[][] blocked) {
     //     if (hasCure) {

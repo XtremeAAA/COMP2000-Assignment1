@@ -1,3 +1,6 @@
+import java.util.Arrays;
+import java.util.Comparator;
+
 // Base class for anything that lives on the grid (humans and zombies)
 public abstract class Entity {
 
@@ -90,26 +93,17 @@ public abstract class Entity {
     // a building (or other obstacle) occupies that cell.
     public abstract void move(int gridWidth, int gridHeight, Entity[] allEntities, boolean[][] blocked);
 
-    public static boolean isTileOccupiedBy(Class<? extends Entity> type, int x, int y, Entity[] allEntities, Entity exclude) { 
-        for (Entity e : allEntities) { 
-            if (type.isInstance(e) && e != exclude && e.getX() == x && e.getY() == y) { 
-                return true; 
-            } 
-        } 
-    return false; 
+    public static boolean isTileOccupiedBy(Class<? extends Entity> type, int x, int y, Entity[] allEntities, Entity exclude) {
+        return Arrays.stream(allEntities)
+                .anyMatch(e -> type.isInstance(e) && e != exclude && e.getX() == x && e.getY() == y);
     }
 
-    public static <T extends Entity> T findNearest(Entity[] allEntities, Class<T> type, int fromX, int fromY) { 
-        T nearest = null; 
-        int bestDist = Integer.MAX_VALUE; 
-        for (Entity e : allEntities) { 
-            if (type.isInstance(e)) { 
-                int dist = Math.abs(e.getX() - fromX) + Math.abs(e.getY() - fromY);
-                 if (dist < bestDist) { 
-                    bestDist = dist; nearest = type.cast(e); 
-                } 
-            } 
-        } 
-    return nearest; 
+    // Nearest entity of the given type by Manhattan distance (first one wins a tie).
+    public static <T extends Entity> T findNearest(Entity[] allEntities, Class<T> type, int fromX, int fromY) {
+        return Arrays.stream(allEntities)
+                .filter(type::isInstance)
+                .map(type::cast)
+                .min(Comparator.comparingInt(e -> Math.abs(e.getX() - fromX) + Math.abs(e.getY() - fromY)))
+                .orElse(null);
     }
 }
