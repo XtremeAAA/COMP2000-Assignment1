@@ -9,13 +9,11 @@
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Random;
 
 public class Human extends Entity implements Infectable {
 
     private boolean infected = false;
     private boolean hasCure = false;
-    private static final Random rand = new Random();
 
     private List<Cure> visibleCures = new ArrayList<>(); 
     private static final int DETECTION_RADIUS = 5;

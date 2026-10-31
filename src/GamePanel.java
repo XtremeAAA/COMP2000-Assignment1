@@ -196,10 +196,11 @@ public class GamePanel extends JPanel {
                 if (h.hasCure()) {
                     for (Entity other : entities) {
                         if (other instanceof Zombie) {
-                            int dx = Math.abs(other.getX() - h.getX());
-                            int dy = Math.abs(other.getY() - h.getY());
-                            if (dx <= 1 && dy <= 1 && !curedZombies.contains(other)) {
-                                curedZombies.add((Zombie) other);
+                            Zombie zombie = (Zombie) other;
+                            int dx = Math.abs(zombie.getX() - h.getX());
+                            int dy = Math.abs(zombie.getY() - h.getY());
+                            if (dx <= 1 && dy <= 1 && !curedZombies.contains(zombie)) {
+                                curedZombies.add(zombie);
                                 h.useCure();
                                 curesUsedCount++;
                                 break;
