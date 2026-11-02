@@ -100,27 +100,39 @@ public class Main {
         sidebar.add(infoLabel, BorderLayout.NORTH);
         sidebar.add(buttonWrapper, BorderLayout.CENTER);
 
+        // OBSERVER: the event log listens to the game and prints what happens.
+        EventLog eventLog = new EventLog();
+        eventLog.getComponent().setPreferredSize(new Dimension(240, 190));
+        eventLog.getComponent().setBorder(BorderFactory.createTitledBorder("Event log"));
+        sidebar.add(eventLog.getComponent(), BorderLayout.SOUTH);
+        gamePanel.addListener(eventLog);
+
         frame.setLayout(new BorderLayout());
         frame.add(sidebar, BorderLayout.WEST);
         frame.add(layeredPane, BorderLayout.CENTER);
 
         final boolean[] running = {false};
-        final Timer[] logicTimerHolder = new Timer[1];
 
         // Slower timer: each entity decides its next grid move
-        Timer logicTimer = new Timer(500, e -> {
-            gamePanel.step();
-            updateInfoLabel(infoLabel, gamePanel);
-            if (gamePanel.isGameOver()) {
-                // Stop the simulation, but NOT the render timer: it must keep repainting so
-                // the final transformation is drawn before the end screen appears.
-                logicTimerHolder[0].stop();
+        Timer logicTimer = new Timer(500, e -> gamePanel.step());
+
+        // OBSERVERS written as lambdas (GameListener has one method, so a lambda is enough).
+        // The window no longer has to ask GamePanel "has anything changed?" after every step:
+        // GamePanel tells us when something happens.
+
+        // Observer 1: refresh the numbers in the sidebar whenever something happens.
+        gamePanel.addListener(event -> updateInfoLabel(infoLabel, gamePanel));
+
+        // Observer 2: when the game ends, stop the simulation timer and reset the Play button.
+        // The render timer is NOT stopped: it must keep repainting so the final transformation
+        // is drawn before the end screen appears.
+        gamePanel.addListener(event -> {
+            if (event.type() == GameEvent.Type.GAME_OVER) {
+                logicTimer.stop();
                 running[0] = false;
                 playButton.setText("Play");
             }
         });
-
-        logicTimerHolder[0] = logicTimer;
 
         playButton.addActionListener(e -> {
             if (gamePanel.isGameOver()) return;
@@ -146,7 +158,7 @@ public class Main {
             } catch (WorldSetupException ex) {
                 JOptionPane.showMessageDialog(null, ex.getMessage(), "Reset Failed", JOptionPane.ERROR_MESSAGE);
             }
-            updateInfoLabel(infoLabel, gamePanel);
+            // No manual label refresh needed: resetEntities() sends a RESET event to the listeners.
         });
 
         closeButton.addActionListener(e -> frame.dispose());
@@ -165,6 +177,7 @@ public class Main {
             + "Doctors: " + stats.getDoctors() + "<br><br>"
             + "Infected so far: " + gamePanel.getInfectionCount() + "<br>"
             + "Cured so far: " + gamePanel.getCuredCount() + "<br><br>"
-            + "Day: " + gamePanel.getDayCount() + "</html>");
+            + "Day: " + gamePanel.getDayCount() + (gamePanel.isNight() ? " (night)" : " (day)") + "<br>"
+            + "Weather: " + gamePanel.getWeather().getLabel() + "</html>");
     }
 }

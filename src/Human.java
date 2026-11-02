@@ -48,13 +48,13 @@ public class Human extends Entity implements Infectable {
     }
 
     @Override public void move(int gridWidth, int gridHeight, Entity[] allEntities, boolean[][] blocked) {
-        MovementStrategy strategy;
+        MovementStrategy<Human> strategy;
         if (hasCure) {
             strategy = new DeliverCureStrategy();
         } else {
             Zombie nearestZombie = Entity.findNearest(allEntities, Zombie.class, gridX, gridY);
             Cure nearestCure = findNearestCure();
-            boolean zombieNear = nearestZombie != null && distanceTo(nearestZombie.getX(), nearestZombie.getY()) <= DETECTION_RADIUS;
+                        boolean zombieNear = nearestZombie != null && distanceTo(nearestZombie.getX(), nearestZombie.getY()) <= zombieSightRange();
             boolean cureNear = nearestCure != null && distanceTo(nearestCure.getX(), nearestCure.getY()) <= DETECTION_RADIUS;
             if (zombieNear) {
                 strategy = new FleeStrategy(); 
@@ -65,6 +65,12 @@ public class Human extends Entity implements Infectable {
             }
         } 
         strategy.move(this, gridWidth, gridHeight, allEntities, blocked);
+    }
+        // How far away this human can notice a zombie. The weather sets the range
+    // (fog makes it short) and humans see one tile less at night.
+    private int zombieSightRange() {
+        int range = conditions.weather().getSightRange();
+        return conditions.night() ? Math.max(1, range - 1) : range;
     }
     private int distanceTo(int x, int y) {
         return Math.abs(x - gridX) + Math.abs(y - gridY);

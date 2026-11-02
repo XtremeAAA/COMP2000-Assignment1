@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 import javax.swing.*;
 
@@ -36,12 +37,48 @@ public class GamePanel extends JPanel {
     private static final int CURE_SPAWN_EVERY = 10;  // spawn a new cure every N logic steps
     private int cureSpawnCounter = 0;
 
+    // OBSERVER pattern: GamePanel is the "subject". Anything that wants to know what is
+    // happening (sidebar, event log, main window) registers a listener and is told when
+    // something happens, so GamePanel never needs to know who is listening.
+    private final List<GameListener> listeners = new CopyOnWriteArrayList<>();
+
+    // Weather arrives as an infinite stream; each logic step takes the next value from it.
+    private WeatherStream weatherStream = new WeatherStream();
+    private Weather weather = Weather.CLEAR;
+
+    // Another observer: it remembers every event and, when the game ends, uses stream
+    // pipelines to work out what happened (shown on the end screen).
+    private final StatsRecorder recorder = new StatsRecorder();
+    private List<String> endSummary = List.of();
+
+    public void addListener(GameListener listener) {
+        listeners.add(listener);
+    }
+
+    public void removeListener(GameListener listener) {
+        listeners.remove(listener);
+    }
+
+    private void fire(GameEvent.Type type, String message) {
+        GameEvent event = new GameEvent(type, message, dayCount, weather, isNight());
+        listeners.forEach(l -> l.onEvent(event));
+    }
+
+    public Weather getWeather() {
+        return weather;
+    }
+
+    public boolean isNight() {
+        return getDayProgress() >= 0.5;
+    }
+
     public int getCureCount() {
         return cures.size();
     }
 
     public GamePanel() throws WorldSetupException {
         setPreferredSize(new Dimension(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE));
+        addListener(recorder);
         setupWorld();
         resetEntities();
     }
@@ -53,10 +90,12 @@ public class GamePanel extends JPanel {
             gameOver = true;
             gameOverAtNanos = System.nanoTime();
             winnerText = "Humans Win!";
+            fire(GameEvent.Type.GAME_OVER, winnerText);
         } else if (getHumanCount() == 0) {
             gameOver = true;
             gameOverAtNanos = System.nanoTime();
             winnerText = "Zombies Win!";
+            fire(GameEvent.Type.GAME_OVER, winnerText);
         }
     }
 
@@ -150,9 +189,16 @@ public class GamePanel extends JPanel {
         gameOver = false;
         endScreenVisible = false;
         winnerText = "";
+        endSummary = List.of();
         curesUsedCount = 0;
         infectionCount = 0;
         curedCount = 0;
+
+        // Start a fresh weather forecast; its first value is always CLEAR.
+        weatherStream = new WeatherStream();
+        weather = weatherStream.next();
+
+        fire(GameEvent.Type.RESET, "New game started");
         repaint();
     }
 
@@ -166,6 +212,7 @@ public class GamePanel extends JPanel {
         try {
             Point p = findFreeCell(1000);
             cures.add(new Cure(p.x, p.y));
+            fire(GameEvent.Type.CURE_SPAWNED, "A new cure appeared");
         } catch (WorldSetupException e) {
             // Grid is too crowded — skip this spawn.
         }
@@ -187,6 +234,8 @@ public class GamePanel extends JPanel {
             }
         }
         cures.removeAll(pickedCures);
+        // Tell the listeners only AFTER the list is updated, so they see the final counts.
+        pickedCures.forEach(c -> fire(GameEvent.Type.CURE_PICKED_UP, "A human picked up a cure"));
 
         // Part 2: any cure-carrier adjacent to a zombie cures it.
         List<Zombie> curedZombies = new ArrayList<>();
@@ -218,11 +267,28 @@ public class GamePanel extends JPanel {
             entities.remove(z);
             entities.add(newHuman);
             curedCount++;
+            fire(GameEvent.Type.ZOMBIE_CURED, "A zombie was cured");
         }
     }
 
     public void step() {
         if (gameOver) return;
+
+        // Take the next weather from the stream and tell the listeners if it changed.
+        Weather previousWeather = weather;
+        weather = weatherStream.next();
+        if (weather != previousWeather) {
+            fire(GameEvent.Type.WEATHER_CHANGED, "Weather changed: " + weather.getLabel());
+        }
+
+        // Hand every entity the same read-only snapshot of the world (done one by one,
+        // BEFORE the parallel phase, so the parallel threads only ever read it).
+        WorldConditions conditions = new WorldConditions(isNight(), weather);
+        entities.forEach(e -> e.setConditions(conditions));
+
+        // One STEP event per turn: lets the recorder count how many turns each weather lasted.
+        fire(GameEvent.Type.STEP, "Turn");
+
         boolean[][] blocked = computeBlockedGrid();
         Entity[] snapshot = entities.toArray(new Entity[0]);
 
@@ -243,7 +309,9 @@ public class GamePanel extends JPanel {
         //    which change during this phase;
         //  - every entity only WRITES its own nextX/nextY (via planPosition);
         //  - PathFinder is static and allocates all its working data per call;
-        //  - WanderStrategy uses ThreadLocalRandom rather than one shared Random.
+        //  - WanderStrategy, ZombieStrategies and ScaledSpeedDecorator use ThreadLocalRandom
+        //    rather than one shared Random;
+        //  - the WorldConditions each entity reads is an immutable record, set before this phase.
         // forEach on a parallel stream finishes all tasks before returning, so Phase 3 sees
         // every plan. The decisions don't depend on each other, so the result matches a
         // sequential run.
@@ -276,11 +344,15 @@ public class GamePanel extends JPanel {
     // Fast render tick: advances day/night and glides entities toward their targets
     public void tick() {
     int prevTick = dayNightTick;
+    boolean wasNight = isNight();
     dayNightTick = (dayNightTick + 1) % DAY_LENGTH_TICKS;
-    
+
     // dayNightTick =0 --> finish 1 day (day++)
     if (dayNightTick < prevTick) {
         dayCount++;
+        fire(GameEvent.Type.DAY_BROKE, "Day " + dayCount + " begins");
+    } else if (!wasNight && isNight()) {
+        fire(GameEvent.Type.NIGHT_FELL, "Night falls - zombies are stronger");
     }
 
     for (Entity e : entities) {
@@ -292,6 +364,7 @@ public class GamePanel extends JPanel {
     if (gameOver && !endScreenVisible
             && System.nanoTime() - gameOverAtNanos >= END_SCREEN_DELAY_NANOS) {
         endScreenVisible = true;
+        endSummary = recorder.summary();   // the stream pipelines run once, here
     }
     repaint();
 }
@@ -327,6 +400,7 @@ public class GamePanel extends JPanel {
             entities.remove(h);
             entities.add(newZombie);
             infectionCount++;
+            fire(GameEvent.Type.HUMAN_INFECTED, "A human was infected");
         }
     }
 
@@ -368,6 +442,7 @@ public class GamePanel extends JPanel {
         }
         drawCelestialBody(g2, t);
         drawEntities(g2);
+        drawWeather(g2);
         drawNightOverlay(g2, t);
 
         if (endScreenVisible) {
@@ -455,6 +530,35 @@ public class GamePanel extends JPanel {
         }
     }
 
+    // Fog is a pale grey haze; rain and storms are slanted streaks (storms are darker and heavier).
+    private void drawWeather(Graphics2D g2) {
+        int w = GRID_SIZE * CELL_SIZE;
+        int h = GRID_SIZE * CELL_SIZE;
+        switch (weather) {
+            case FOG:
+                g2.setColor(new Color(215, 220, 225, 95));
+                g2.fillRect(0, 0, w, h);
+                break;
+            case RAIN:
+            case STORM:
+                boolean storm = weather == Weather.STORM;
+                if (storm) {
+                    g2.setColor(new Color(35, 45, 70, 80));
+                    g2.fillRect(0, 0, w, h);
+                }
+                g2.setColor(new Color(170, 200, 240, 150));
+                int drops = storm ? 140 : 70;
+                for (int i = 0; i < drops; i++) {
+                    int x = (i * 97 + dayNightTick * 7) % w;
+                    int y = (i * 53 + dayNightTick * 19) % h;
+                    g2.drawLine(x, y, x - 4, y + 10);
+                }
+                break;
+            default:
+                break; // CLEAR: nothing to draw
+        }
+    }
+
     // A translucent dark-blue tint that peaks at midnight and clears at noon
     private void drawNightOverlay(Graphics2D g2, double t) {
         double darkness = (1 - Math.cos(t * 2 * Math.PI)) / 2.0;
@@ -501,6 +605,15 @@ public class GamePanel extends JPanel {
         FontMetrics statsFm = g2.getFontMetrics();
         int statsWidth = statsFm.stringWidth(stats);
         g2.drawString(stats, (w - statsWidth) / 2, h / 2 + 24);
+
+        // What the simulation found out (from StatsRecorder).
+        g2.setFont(new Font("SansSerif", Font.PLAIN, 15));
+        FontMetrics sumFm = g2.getFontMetrics();
+        int lineY = h / 2 + 64;
+        for (String line : endSummary) {
+            g2.drawString(line, (w - sumFm.stringWidth(line)) / 2, lineY);
+            lineY += 26;
+        }
     }
     public int getDayCount() {
     return dayCount;
