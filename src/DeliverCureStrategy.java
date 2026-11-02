@@ -1,4 +1,4 @@
-public class DeliverCureStrategy implements MovementStrategy {
+public class DeliverCureStrategy implements MovementStrategy<Human> {
     @Override
     public void move(Human self, int gridWidth, int gridHeight, Entity[] allEntities, boolean[][] blocked) {
         Zombie target = Entity.findNearest(allEntities, Zombie.class, self.getX(), self.getY());

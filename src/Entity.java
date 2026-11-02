@@ -18,6 +18,11 @@ public abstract class Entity {
     protected double animPhase = 0;
 
     protected String emoji;
+    
+
+    // What the world is like right now (night/day, weather). GamePanel sets this on every
+    // entity BEFORE the parallel move phase, then it is only read - so it is thread safe.
+    protected WorldConditions conditions = WorldConditions.DEFAULT;
 
     public Entity(int x, int y, String emoji) {
         this.gridX = x;
@@ -32,6 +37,9 @@ public abstract class Entity {
     public double getRenderX() { return renderX; }
     public double getRenderY() { return renderY; }
     public String getEmoji() { return emoji; }
+       
+    public WorldConditions getConditions() { return conditions; }
+    public void setConditions(WorldConditions conditions) { this.conditions = conditions; }
 
     // Call this to set a reset position for the entity
     public void resetPlan() {

@@ -1,6 +1,6 @@
 import java.util.Comparator;
 
-public class SeekCureStrategy implements MovementStrategy {
+public class SeekCureStrategy implements MovementStrategy<Human>{
     @Override
     public void move(Human self, int gridWidth, int gridHeight, Entity[] allEntities, boolean[][] blocked) {
         // Nearest visible cure by Manhattan distance (first one wins a tie, as before).

@@ -1,5 +1,5 @@
 import java.util.concurrent.ThreadLocalRandom;
-public class WanderStrategy implements MovementStrategy {
+public class WanderStrategy implements MovementStrategy<Human> {
     @Override public void move(Human self, int gridWidth, int gridHeight, Entity[] allEntitys, boolean [][] blocked) {
         int dx = ThreadLocalRandom.current().nextInt(3) - 1; // thread-safe: no shared Random
         int dy = ThreadLocalRandom.current().nextInt(3) - 1;
