@@ -1,11 +1,3 @@
-// public void move(int gridWidth, int gridHeight, Entity[] allEntities, boolean[][] blocked) {
-//     if (hasCure) {
-//         ...
-//     }
-//     ...
-// }
-// private int clamp(int value, int min, int max) { ... }
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -17,6 +9,16 @@ public class Human extends Entity implements Infectable {
 
     private List<Cure> visibleCures = new ArrayList<>(); 
     private static final int DETECTION_RADIUS = 5;
+    private static final MovementStrategy<Human> DELIVER_CURE_STRATEGY = new DeliverCureStrategy();
+    private static final MovementStrategy<Human> FLEE_STRATEGY = 
+            new ScaledSpeedDecorator<>(new FleeStrategy(), c -> c.weather() == Weather.STORM ? 0.5 : 0.8);
+            
+    private static final MovementStrategy<Human> SEEK_CURE_STRATEGY = 
+            new ScaledSpeedDecorator<>(new SeekCureStrategy(), c -> c.weather() == Weather.STORM ? 0.6 : 0.9);
+            
+    private static final MovementStrategy<Human> WANDER_STRATEGY = 
+            new ScaledSpeedDecorator<>(new WanderStrategy(), c -> c.weather() == Weather.STORM ? 0.4 : 0.7);
+
     public List<Cure> getVisibleCures() {
         return visibleCures;
     }
@@ -29,88 +31,62 @@ public class Human extends Entity implements Infectable {
         super(x, y, "\uD83E\uDDCD"); // 🧍
     }
 
-    // Overloaded constructor: allow creating a human with a custom emoji
     public Human(int x, int y, String customEmoji) {
         super(x, y, customEmoji);
     }
+
     public boolean hasCure() {
         return hasCure;
     }
 
     public void giveCure() {
         this.hasCure = true;
-        this.emoji = "\uD83E\uDDD1\u200D\u2695\uFE0F"; //🧑‍⚕️
+        this.emoji = "\uD83E\uDDD1\u200D\u2695\uFE0F"; // 🧑‍⚕️
     }
 
     public void useCure() {
         this.hasCure = false;
-        this.emoji = "\uD83E\uDDCD"; //🧍
+        this.emoji = "\uD83E\uDDCD"; // 🧍
     }
 
-    @Override public void move(int gridWidth, int gridHeight, Entity[] allEntities, boolean[][] blocked) {
+    @Override 
+    public void move(int gridWidth, int gridHeight, Entity[] allEntities, boolean[][] blocked) {
         MovementStrategy<Human> strategy;
+        
         if (hasCure) {
-            strategy = new DeliverCureStrategy();
+            strategy = DELIVER_CURE_STRATEGY;
         } else {
             Zombie nearestZombie = Entity.findNearest(allEntities, Zombie.class, gridX, gridY);
             Cure nearestCure = findNearestCure();
-                        boolean zombieNear = nearestZombie != null && distanceTo(nearestZombie.getX(), nearestZombie.getY()) <= zombieSightRange();
+            
+            boolean zombieNear = nearestZombie != null && distanceTo(nearestZombie.getX(), nearestZombie.getY()) <= zombieSightRange();
             boolean cureNear = nearestCure != null && distanceTo(nearestCure.getX(), nearestCure.getY()) <= DETECTION_RADIUS;
+            
             if (zombieNear) {
-                strategy = new FleeStrategy(); 
+                strategy = FLEE_STRATEGY; 
             } else if (cureNear) {
-                strategy = new SeekCureStrategy();
+                strategy = SEEK_CURE_STRATEGY;
             } else {
-                strategy = new WanderStrategy();
+                strategy = WANDER_STRATEGY;
             }
         } 
         strategy.move(this, gridWidth, gridHeight, allEntities, blocked);
     }
-        // How far away this human can notice a zombie. The weather sets the range
-    // (fog makes it short) and humans see one tile less at night.
+
     private int zombieSightRange() {
         int range = conditions.weather().getSightRange();
         return conditions.night() ? Math.max(1, range - 1) : range;
     }
+
     private int distanceTo(int x, int y) {
         return Math.abs(x - gridX) + Math.abs(y - gridY);
     } 
+
     private Cure findNearestCure() {
         return visibleCures.stream()
                 .min(Comparator.comparingInt(c -> distanceTo(c.getX(), c.getY())))
                 .orElse(null);
     }
-    // public void move(int gridWidth, int gridHeight, Entity[] allEntities, boolean[][] blocked) {
-    //     if (hasCure) {
-    //         Zombie targetZombie = Entity.findNearest(allEntities, Zombie.class, gridX, gridY);
-    //         if (targetZombie != null) {
-    //             int dx = Integer.compare(targetZombie.getX(), this.gridX);
-    //             int dy = Integer.compare(targetZombie.getY(), this.gridY);
-
-    //             int newX = clamp(gridX + dx, 0, gridWidth - 1);
-    //             int newY = clamp(gridY + dy, 0, gridHeight - 1);
-
-    //             if (!blocked[newY][newX]) {
-    //                 setPosition(newX, newY);
-    //                 return;
-    //             }
-    //         }
-    //     }
-    //     // Humans wander randomly, avoiding buildings
-    //     int dx = rand.nextInt(3) - 1; // -1, 0, or 1
-    //     int dy = rand.nextInt(3) - 1;
-
-    //     int newX = clamp(gridX + dx, 0, gridWidth - 1);
-    //     int newY = clamp(gridY + dy, 0, gridHeight - 1);
-
-    //     if (!blocked[newY][newX] && !Entity.isTileOccupiedBy(Zombie.class, newX, newY, allEntities, this)) {
-    //         setPosition(newX, newY);
-    //     }
-    // }
-
-    // private int clamp(int value, int min, int max) {
-    //     return Math.max(min, Math.min(max, value));
-    // }
 
     @Override
     public void infect() {

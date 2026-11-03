@@ -220,45 +220,41 @@ public class GamePanel extends JPanel {
 
     private void handleCures() {
         // Part 1: pick up any cure a human is standing on.
-        List<Cure> pickedCures = new ArrayList<>();
-        for (Cure c : cures) {
-            for (Entity e : entities) {
-                if (e instanceof Human && e.getX() == c.getX() && e.getY() == c.getY()) {
-                    Human h = (Human) e;
-                    if (!h.hasCure()) {
-                        h.giveCure();
-                        pickedCures.add(c);
-                        break;
-                    }
-                }
-            }
-        }
+       List<Cure> pickedCures = new ArrayList<>();
+        cures.stream().forEach(c -> {
+            entities.stream()
+                .filter(e -> e instanceof Human)
+                .map(e -> (Human) e)
+                .filter(h -> !h.hasCure() && h.getX() == c.getX() && h.getY() == c.getY())
+                .findFirst()
+                .ifPresent(h -> {
+                    h.giveCure();
+                    pickedCures.add(c);
+                });
+        });
         cures.removeAll(pickedCures);
         // Tell the listeners only AFTER the list is updated, so they see the final counts.
         pickedCures.forEach(c -> fire(GameEvent.Type.CURE_PICKED_UP, "A human picked up a cure"));
 
         // Part 2: any cure-carrier adjacent to a zombie cures it.
         List<Zombie> curedZombies = new ArrayList<>();
-        for (Entity e : entities) {
-            if (e instanceof Human) {
-                Human h = (Human) e;
-                if (h.hasCure()) {
-                    for (Entity other : entities) {
-                        if (other instanceof Zombie) {
-                            Zombie zombie = (Zombie) other;
-                            int dx = Math.abs(zombie.getX() - h.getX());
-                            int dy = Math.abs(zombie.getY() - h.getY());
-                            if (dx <= 1 && dy <= 1 && !curedZombies.contains(zombie)) {
-                                curedZombies.add(zombie);
-                                h.useCure();
-                                curesUsedCount++;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        entities.stream()
+            .filter(e -> e instanceof Human)
+            .map(e -> (Human) e)
+            .filter(Human::hasCure)
+            .forEach(h -> {
+                entities.stream()
+                    .filter(e -> e instanceof Zombie)
+                    .map(e -> (Zombie) e)
+                    .filter(z -> Math.abs(z.getX() - h.getX()) <= 1 && Math.abs(z.getY() - h.getY()) <= 1)
+                    .filter(z -> !curedZombies.contains(z))
+                    .findFirst()
+                    .ifPresent(z -> {
+                        curedZombies.add(z);
+                        h.useCure();
+                        curesUsedCount++;
+                    });
+            });
 
         // Part 3: convert each cured zombie into a human.
         for (Zombie z : curedZombies) {
@@ -270,7 +266,6 @@ public class GamePanel extends JPanel {
             fire(GameEvent.Type.ZOMBIE_CURED, "A zombie was cured");
         }
     }
-
     public void step() {
         if (gameOver) return;
 
