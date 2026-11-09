@@ -3,10 +3,17 @@
     "configurations": [
         {
             "type": "java",
+            "name": "Main",
+            "request": "launch",
+            "mainClass": "Main",
+            "projectName": "COMP2000-Assignment1_456000db"
+        },
+        {
+            "type": "java",
             "request": "launch",
             "name": "Launch Java App",
             "mainClass": "Main",
-            "projectName": "COMP2000-Assignment1" 
+            "projectName": "COMP2000-Assignment1"
         }
     ]
 }

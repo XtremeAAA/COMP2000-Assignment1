@@ -64,3 +64,9 @@ Assignment 2:
 Eliminate redundant memory allocation: Instead of repeatedly calling `new FleeStrategy()`, `new WanderStrategy()`, etc., during every tick iteration—which consumes excess memory and slows down the program—we now pre-initialize these strategies as `static final` constants.
 
 Integrate `ScaledSpeedDecorator` for Humans: Much like Zombies, Humans are now affected by adverse weather conditions (e.g., `STORM` or `FOG` will reduce the probability of a Human moving). However, a Doctor who carries the cure (`hasCure`) remains highly determined, maintaining their maximum movement speed to continue their mission of saving others.
+
+Nov/9: Implement Safe Zones and SeekShelterStrategy for emergent survival behaviour
+- Added safeZones coordinates and visual rendering (drawSafeZones) in GamePanel.java.
+- Created SeekShelterStrategy using Stream min() and A* PathFinder to route humans to the nearest shelter.
+- Updated Human.move() to prioritize shelter-seeking during night or storm conditions.
+- Updated GamePanel.handleInfections() stream pipeline to grant infection immunity to humans inside safe zones.
