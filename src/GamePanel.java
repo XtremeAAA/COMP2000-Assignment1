@@ -36,6 +36,7 @@ public class GamePanel extends JPanel {
     private static final int CURE_CAP = 6;           // never have more than this many on the map
     private static final int CURE_SPAWN_EVERY = 10;  // spawn a new cure every N logic steps
     private int cureSpawnCounter = 0;
+    private final List<Point> safeZones = new ArrayList<>();
 
     // OBSERVER pattern: GamePanel is the "subject". Anything that wants to know what is
     // happening (sidebar, event log, main window) registers a listener and is told when
@@ -124,7 +125,9 @@ public class GamePanel extends JPanel {
         buildings.add(new Building(13, 11, 2, 2));
         buildings.add(new Building(2, 12, 3, 2));
         buildings.add(new Building(9, 14, 2, 2));
-
+        safeZones.add(new Point(8, 8));
+        safeZones.add(new Point(9, 8));
+        safeZones.add(new Point(8, 9));
         while (trees.size() < 30) {
             Point p = findFreeCell(1000);
             trees.add(p);
@@ -135,7 +138,9 @@ public class GamePanel extends JPanel {
     public boolean isGameOver() {
         return gameOver;
     }
-
+    public List<Point> getSafeZones() {
+    return safeZones;
+}
     // True once the end-of-game overlay is actually on screen (a short delay after isGameOver()).
     public boolean isEndScreenVisible() {
         return endScreenVisible;
@@ -296,8 +301,12 @@ public class GamePanel extends JPanel {
         // Nobody actually moves yet. Everyone sees the same snapshot.
         // Giving humans their visible cures happens first, sequentially.
         entities.stream()
-                .filter(e -> e instanceof Human)
-                .forEach(e -> ((Human) e).setVisibleCures(cures));
+             .filter(e -> e instanceof Human)
+             .forEach(e -> {
+                 Human h = (Human) e;
+                 h.setVisibleCures(cures);
+                 h.setSafeZones(safeZones);
+             });
 
         // The decisions themselves run as a parallel stream. This is thread-safe because:
         //  - every entity only READS the shared snapshot, cures and blocked grid, none of
@@ -379,15 +388,16 @@ public class GamePanel extends JPanel {
         // are immune, and distinct() stops a human sharing a tile with two zombies being
         // converted twice. Encounter order matches the original nested loops.
         List<Human> toConvert = entities.stream()
-                .filter(z -> z instanceof Zombie)
-                .flatMap(z -> entities.stream()
-                        .filter(other -> other instanceof Human
-                                && other.getX() == z.getX()
-                                && other.getY() == z.getY()))
-                .map(other -> (Human) other)
-                .filter(h -> !h.hasCure())
-                .distinct()
-                .collect(Collectors.toList());
+             .filter(z -> z instanceof Zombie)
+             .flatMap(z -> entities.stream()
+                     .filter(other -> other instanceof Human
+                             && other.getX() == z.getX()
+                             && other.getY() == z.getY()))
+             .map(other -> (Human) other)
+             .filter(h -> !h.hasCure() && !h.isInSafeZone())
+             .distinct()
+             .collect(Collectors.toList());
+                
 
         for (Human h : toConvert) {
             Zombie newZombie = new Zombie(h);
@@ -428,6 +438,7 @@ public class GamePanel extends JPanel {
         double t = getDayProgress();
 
         drawGrass(g2);
+        drawSafeZones(g2);
         drawTrees(g2);
         for (Building b : buildings) {
             b.draw(g2, CELL_SIZE);
@@ -439,12 +450,11 @@ public class GamePanel extends JPanel {
         drawEntities(g2);
         drawWeather(g2);
         drawNightOverlay(g2, t);
-
         if (endScreenVisible) {
             drawEndScreen(g2);
         }
     }
-
+    
     // Draws the sun during the day half of the cycle, the moon during the night half,
     // arcing across the sky as t goes from 0 to 1.
     private void drawCelestialBody(Graphics2D g2, double t) {
@@ -581,7 +591,16 @@ public class GamePanel extends JPanel {
             g2.drawString(emoji, textX, textY);
         }
     }
-
+    private void drawSafeZones(Graphics2D g2) {
+     for (Point p : safeZones) {
+         int px = p.x * CELL_SIZE;
+         int py = p.y * CELL_SIZE;
+         g2.setColor(new Color(65, 150, 255, 100));
+         g2.fillRect(px + 4, py + 4, CELL_SIZE - 8, CELL_SIZE - 8);
+         g2.setColor(new Color(30, 100, 220));
+         g2.drawRect(px + 4, py + 4, CELL_SIZE - 8, CELL_SIZE - 8);
+     }
+ }
     private void drawEndScreen(Graphics2D g2) {
         int w = GRID_SIZE * CELL_SIZE;
         int h = GRID_SIZE * CELL_SIZE;
