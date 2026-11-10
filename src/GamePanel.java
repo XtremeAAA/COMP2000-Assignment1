@@ -32,6 +32,8 @@ public class GamePanel extends JPanel {
     private final List<Cure> cures = new ArrayList<>();
     private int dayNightTick = 0;
     private int[][] background;
+    private Point currentDangerZone = new Point(5, 5); 
+    private int dangerTimer = 0;
 
     private static final int CURE_CAP = 6;           // never have more than this many on the map
     private static final int CURE_SPAWN_EVERY = 10;  // spawn a new cure every N logic steps
