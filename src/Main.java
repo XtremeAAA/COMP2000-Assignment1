@@ -38,11 +38,12 @@ public class Main {
         updateInfoLabel(infoLabel, gamePanel);
 
         JButton playButton = new JButton("Play");
+        JButton speedButton = new JButton("Speed: 1x");
         JButton resetButton = new JButton("Reset");
         JButton closeButton = new JButton("Close");
 
         Dimension buttonSize = new Dimension(150, 38);
-        for (JButton b : new JButton[]{playButton, resetButton, closeButton}) {
+        for (JButton b : new JButton[]{playButton, resetButton, speedButton, closeButton}) {
             b.setMaximumSize(buttonSize);
             b.setAlignmentX(Component.CENTER_ALIGNMENT);
         }
@@ -88,7 +89,7 @@ public class Main {
         buttonBox.add(Box.createVerticalStrut(4));
         buttonBox.add(fpsSlider);
         buttonBox.add(Box.createVerticalStrut(8));
-
+        buttonBox.add(speedButton);
         JPanel buttonWrapper = new JPanel(new FlowLayout(FlowLayout.CENTER));
         buttonWrapper.setBackground(Color.WHITE);
         buttonWrapper.add(buttonBox);
@@ -115,6 +116,14 @@ public class Main {
 
         // Slower timer: each entity decides its next grid move
         Timer logicTimer = new Timer(500, e -> gamePanel.step());
+        double[] speeds = {1.0, 2.0, 4.0, 0.5};
+        int[] speedIndex = {0};
+        speedButton.addActionListener(e -> {
+        speedIndex[0] = (speedIndex[0] + 1) % speeds.length;
+        double mult = speeds[speedIndex[0]];
+        logicTimer.setDelay((int) (500 / mult));
+        speedButton.setText("Speed: " + (mult == (int) mult ? (int) mult + "x" : mult + "x"));
+});
 
         // OBSERVERS written as lambdas (GameListener has one method, so a lambda is enough).
         // The window no longer has to ask GamePanel "has anything changed?" after every step:

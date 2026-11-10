@@ -74,7 +74,23 @@ public class StatsRecorder implements GameListener {
                     rate(infectedByNight.get(true), turnsByNight.get(true)),
                     rate(infectedByNight.get(false), turnsByNight.get(false))));
         }
+        Optional<Map.Entry<Integer, Long>> peakInfectionDay = events.stream()
+                .filter(e -> e.type() == GameEvent.Type.HUMAN_INFECTED)
+                .collect(Collectors.groupingBy(GameEvent::day, Collectors.counting()))
+                .entrySet().stream()
+                .max(Map.Entry.comparingByValue());
 
+        peakInfectionDay.ifPresent(entry ->
+                lines.add("Peak infection day: Day " + entry.getKey() + " (" + entry.getValue() + " infected)"));
+
+        Optional<Map.Entry<Integer, Long>> peakCureDay = events.stream()
+                .filter(e -> e.type() == GameEvent.Type.ZOMBIE_CURED)
+                .collect(Collectors.groupingBy(GameEvent::day, Collectors.counting()))
+                .entrySet().stream()
+                .max(Map.Entry.comparingByValue());
+
+        peakCureDay.ifPresent(entry ->
+                lines.add("Best recovery day: Day " + entry.getKey() + " (" + entry.getValue() + " cured)"));
         return lines;
     }
 

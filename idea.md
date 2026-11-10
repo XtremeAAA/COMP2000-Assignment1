@@ -70,3 +70,7 @@ Nov/9: Implement Safe Zones and SeekShelterStrategy for emergent survival behavi
 - Created SeekShelterStrategy using Stream min() and A* PathFinder to route humans to the nearest shelter.
 - Updated Human.move() to prioritize shelter-seeking during night or storm conditions.
 - Updated GamePanel.handleInfections() stream pipeline to grant infection immunity to humans inside safe zones.
+Nov/10: Add dynamic Danger Zones and custom DangerZoneStats collector
+- Added DangerZoneStats.java using a custom Collector.of(...) to count entities inside the danger zone in a single pass.
+- Added a shifting red Danger Zone in GamePanel.java that moves every 15 steps and renders on the grid.
+- Used parallel streams and method references to infect unprotected humans inside the danger zone.
