@@ -282,6 +282,7 @@ public class GamePanel extends JPanel {
         if (weather != previousWeather) {
             fire(GameEvent.Type.WEATHER_CHANGED, "Weather changed: " + weather.getLabel());
         }
+        
 
         // Hand every entity the same read-only snapshot of the world (done one by one,
         // BEFORE the parallel phase, so the parallel threads only ever read it).
@@ -293,6 +294,7 @@ public class GamePanel extends JPanel {
 
         boolean[][] blocked = computeBlockedGrid();
         Entity[] snapshot = entities.toArray(new Entity[0]);
+        
 
         // Phase 1: reset every entity's plan to "stay put".
         for (Entity e : entities) {
@@ -344,8 +346,32 @@ public class GamePanel extends JPanel {
 
         // Phase 5: occasionally spawn a new cure so the world always has some.
         spawnCureIfNeeded();
+        dangerTimer++;
+        if (dangerTimer >= 15) { //after 15 turns, the danger zone will shift to a new location
+            dangerTimer = 0;
+            try {
+                currentDangerZone = findFreeCell(1000);
+                fire(GameEvent.Type.WEATHER_CHANGED,
+                        "Outbreak zone shifted to (" + currentDangerZone.x + "," + currentDangerZone.y + ")");
+            } catch (WorldSetupException e) {
+                
+            }
+        }
+       DangerZoneStats dzStats = getDangerStats();
+        if (dzStats.getHumansInDanger() > 0 && dzStats.getZombiesInDanger() > 0) {
+            entities.stream()
+                    .filter(e -> e instanceof Human)
+                    .map(e -> (Human) e)
+                    .filter(h -> h.getX() == currentDangerZone.x && h.getY() == currentDangerZone.y)
+                    .filter(h -> !h.hasCure() && !h.isInSafeZone())
+                    .findFirst()
+                    .ifPresent(Human::infect);
+        }
+ 
+
         checkGameOver();
     }
+  
 
     // Fast render tick: advances day/night and glides entities toward their targets
     public void tick() {
@@ -450,6 +476,7 @@ public class GamePanel extends JPanel {
         }
         drawCelestialBody(g2, t);
         drawEntities(g2);
+        drawDangerZones(g2);
         drawWeather(g2);
         drawNightOverlay(g2, t);
         if (endScreenVisible) {
@@ -603,6 +630,20 @@ public class GamePanel extends JPanel {
          g2.drawRect(px + 4, py + 4, CELL_SIZE - 8, CELL_SIZE - 8);
      }
  }
+    private void drawDangerZones(Graphics2D g2) {
+        int px = currentDangerZone.x * CELL_SIZE;
+        int py = currentDangerZone.y * CELL_SIZE;
+        g2.setColor(new Color(255, 60, 60, 120));
+        g2.fillRect(px + 4, py + 4, CELL_SIZE - 8, CELL_SIZE - 8);
+        g2.setColor(new Color(200, 20, 20));
+        g2.drawRect(px + 4, py + 4, CELL_SIZE - 8, CELL_SIZE - 8);
+    }
+
+    public DangerZoneStats getDangerStats() {
+        return entities.stream()
+                .parallel()
+                .collect(DangerZoneStats.collector(currentDangerZone.x, currentDangerZone.y));
+    }
     private void drawEndScreen(Graphics2D g2) {
         int w = GRID_SIZE * CELL_SIZE;
         int h = GRID_SIZE * CELL_SIZE;
