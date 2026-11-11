@@ -115,15 +115,12 @@ gamePanel.addListener(recorder);analytics
 gamePanel.addListener(eventLog);
 gamePanel.addListener(event -> updateInfoLabel(infoLabel, gamePanel));
 
-
-
-
 **1.3.** For each pattern, explain why you chose it over an alternative. What trade-off did you make?
-
-
-
-
-
+Strategy Pattern (MovementStrategy<T>): Chosen over a massive if-else block or deep subclassing so entities can swap movement behaviours at runtime. 
+Trade-off: Creates more strategy classes to manage, but keeps each behaviour isolated and easy to extend.  
+ Decorator Pattern (ScaledSpeedDecorator<T>): Chosen over duplicating weather speed checks inside every strategy class. It wraps any strategy to scale speed dynamically without modifying existing pathfinding code. 
+ Trade-off: Adds an extra wrapper layer and minor non-determinism via probabilistic turn-skipping.   
+ Observer Pattern (GameListener): Chosen over hard-coding EventLog and StatsRecorder calls directly inside GamePanel, keeping simulation logic decoupled from UI and analytics. Trade-off: Event flow is indirect, making step-by-step debugging slightly harder than direct method calls.   
 ---
 
 ## 2. Streams / Lambdas / Parallelism
@@ -169,8 +166,50 @@ Lambdas & Method References: Uses method reference SwingUtilities.invokeLater(Ma
 
 **2.2.** For the most sophisticated use, paste the code and explain: what does it do, and why was a stream/lambda better than a loop?
 
+// 1. Group STEP and HUMAN_INFECTED events by Weather into EnumMaps using downstream collectors
+Map<Weather, Long> turns = events.stream()
+        .filter(e -> e.type() == GameEvent.Type.STEP)
+        .collect(Collectors.groupingBy(GameEvent::weather,
+                () -> new EnumMap<>(Weather.class), Collectors.counting()));
 
+Map<Weather, Long> infected = events.stream()
+        .filter(e -> e.type() == GameEvent.Type.HUMAN_INFECTED)
+        .collect(Collectors.groupingBy(GameEvent::weather,
+                () -> new EnumMap<>(Weather.class), Collectors.counting()));
 
+// 2. Normalise into infection rate per 10 turns, filter out small samples, and find the maximum
+Optional<Map.Entry<Weather, Double>> deadliest = turns.entrySet().stream()
+        .filter(e -> e.getValue() >= MIN_TURNS)
+        .map(e -> Map.entry(e.getKey(), rate(infected.getOrDefault(e.getKey(), 0L), e.getValue())))
+        .max(Map.Entry.comparingByValue());
+
+lines.add(deadliest
+        .map(e -> String.format("Deadliest weather: %s (%.1f infections per 10 turns)",
+                e.getKey().getLabel(), e.getValue()))
+        .orElse("Not enough turns to compare the weather"));
+
+// 3. Partition events by boolean predicate (Night vs. Day) using partitioningBy + counting
+Map<Boolean, Long> turnsByNight = events.stream()
+        .filter(e -> e.type() == GameEvent.Type.STEP)
+        .collect(Collectors.partitioningBy(GameEvent::night, Collectors.counting()));
+Map<Boolean, Long> infectedByNight = events.stream()
+        .filter(e -> e.type() == GameEvent.Type.HUMAN_INFECTED)
+        .collect(Collectors.partitioningBy(GameEvent::night, Collectors.counting()));
+
+// 4. Identify Peak Infection Day & Best Recovery Day via groupingBy(GameEvent::day, counting())
+Optional<Map.Entry<Integer, Long>> peakInfectionDay = events.stream()
+        .filter(e -> e.type() == GameEvent.Type.HUMAN_INFECTED)
+        .collect(Collectors.groupingBy(GameEvent::day, Collectors.counting()))
+        .entrySet().stream()
+        .max(Map.Entry.comparingByValue());
+
+What it does:
+This pipeline analyses the recorded GameEvent log at the end of the simulation to generate statistical insights. It groups events by Weather (using groupingBy into an EnumMap) and by day/night cycles (using partitioningBy) with Collectors.counting() to calculate normalised infection rates per 10 turns, while also grouping events by GameEvent::day to identify the peak infection day.
+
+Why a stream/lambda was better than a loop:
+Declarative & Concise: It replaces multiple nested for-loops, manual Map initialisation (getOrDefault / put boilerplate), and temporary counter variables with readable, composable pipelines (filter, collect, map, max).
+Null-Safety with Optional: Using .max(Map.Entry.comparingByValue()) returns an Optional, allowing .map(...).orElse(...) to cleanly handle edge cases (e.g., when a game ends before reaching MIN_TURNS) without risking NullPointerException.
+Immutability & Less Error-Prone: Downstream collectors (Collectors.counting()) and method references (GameEvent::weather, GameEvent::day) eliminate manual mutable state tracking, reducing off-by-one and state-mutation bugs.
 
 
 **2.3.** Did you use parallel streams, custom collectors, or the Fork/Join framework? If yes, how did you ensure thread safety? If no, where could parallelism be introduced?
@@ -190,47 +229,81 @@ Phase 2: execute movement & A* pathfinding decisions in parallel across ForkJoin
 Arrays.stream(snapshot).parallel()
         .forEach(e -> e.move(GRID_SIZE, GRID_SIZE, snapshot, blocked));
 
-
-
-
 ---
 
 ## 3. Uniqueness and Creativity
 
 **3.1.** What did you add to your simulation that went beyond the in-class activities? Describe the feature and what inspired it.
 
-
-
-
+I added three interrelated survival mechanics inspired by open-world survival games (for example: Dying Light 1/2):
+Safe Zones & SeekShelterStrategy: Translucent blue sanctuary tiles where humans are immune to infection, paired with an A* pathfinding strategy that routes humans to shelter during nights or storms.
+Dynamic Danger Zones & Custom Collector: A red outbreak hotspot that shifts coordinates every 15 steps and uses a custom thread-safe DangerZoneStats collector to infect unprotected humans sharing the zone with zombies.
+Doctor Emergency Broadcast (EmergencyAlert): A custom @FunctionalInterface using lambdas and Optional<Point> that enables cure-carrying doctors to rally nearby humans within a 6-tile radius, alongside a simulation speed button (0.5x–4x) in Main.java.
 
 **3.2.** Paste a code snippet or describe a design decision that demonstrates emergent behaviour, non-trivial complexity, or a genuinely surprising outcome.
 
-
-
-
-
+boolean dangerousConditions = conditions.night() || conditions.weather() == Weather.STORM;
+if (dangerousConditions && !safeZones.isEmpty() && (zombieNear || !cureNear)) {
+    strategy = SEEK_SHELTER_STRATEGY;
+} else if (zombieNear) {
+    strategy = FLEE_STRATEGY;
+} else if (cureNear) {
+    strategy = SEEK_CURE_STRATEGY;
+} else if (emergencyAlert.findNearestDoctor(gridX, gridY).isPresent()) {
+    Point docPos = emergencyAlert.findNearestDoctor(gridX, gridY).get();
+    int[] step = PathFinder.findNextStep(gridX, gridY, docPos.x, docPos.y, blocked, gridWidth);
+    if (step != null && !Entity.isTileOccupiedBy(Human.class, step[0], step[1], allEntities, this)) {
+        planPosition(step[0], step[1]);
+    }
+    return;
+} else {
+    strategy = WANDER_STRATEGY;
+}
 **3.3.** If you had another 6 weeks, what would you add or change?
 
 
-
-
+Finite Safe Zone Capacity & Supplies: Add capacity limits and depleting supplies to Safe Zones so humans are forced to periodically venture back out into the map rather than camping indefinitely.
+Some more function rather than just run away from zombie, like add a weapon in random location and create a warrior to fight, something like that
 
 ---
 
 ## 4. Log Book and Final Reflection
 
 **4.1.** Attach or link your log book entries for Weeks 7–13.
-
-
-
-
+Send via Word
 
 **4.2.** Reflect on the semester:
 
 - What was the most important concept you learned?
+Combining composition over inheritance (Strategy and Decorator patterns) with behaviour parameterisation (Lambdas)
 
 - What design trade-off did you face, and how did you resolve it?
+Balancing parallel stream performance against thread-safety in GamePanel.step(). Updating positions directly in .parallel() caused race conditions, so we used a two-phase "plan-then-commit" approach: threads read a shared snapshot to plan nextX/nextY in parallel, and a sequential pass safely applies the moves
 
 - If you started over, what would you do differently?
-
+Attend more lecture classes, the only problem i had was I did not attend to any lecture class because the lectures were recorded only, but stick on online created more unsolved problem for me
 - What feedback from the Week 7 submission did you act on?
+Design Diagram & Missing Classes: Created and submitted the full UML design pattern diagram PDF and documented every class in the codebase within the worksheet.   
+Git Commit Messages: Wrote clear, descriptive commit summaries and bulleted descriptions explaining the exact changes made in each commit.
+ 
+
+
+ 
+ *AN*
+Eliminate redundant memory allocation: Instead of repeatedly calling `new FleeStrategy()`, `new WanderStrategy()`, etc., during every tick iteration—which consumes excess memory and slows down the program—we now pre-initialize these strategies as `static final` constants.
+
+Integrate `ScaledSpeedDecorator` for Humans: Much like Zombies, Humans are now affected by adverse weather conditions (e.g., `STORM` or `FOG` will reduce the probability of a Human moving). However, a Doctor who carries the cure (`hasCure`) remains highly determined, maintaining their maximum movement speed to continue their mission of saving others.
+
+Nov/9: Implement Safe Zones and SeekShelterStrategy for emergent survival behaviour
+- Added safeZones coordinates and visual rendering (drawSafeZones) in GamePanel.java.
+- Created SeekShelterStrategy using Stream min() and A* PathFinder to route humans to the nearest shelter.
+- Updated Human.move() to prioritize shelter-seeking during night or storm conditions.
+- Updated GamePanel.handleInfections() stream pipeline to grant infection immunity to humans inside safe zones.
+
+Nov/10: Add dynamic Danger Zones and custom DangerZoneStats collector
+- Added DangerZoneStats.java using a custom Collector.of(...) to count entities inside the danger zone in a single pass.
+- Added a shifting red Danger Zone in GamePanel.java that moves every 15 steps and renders on the grid.
+- Used parallel streams and method references to infect unprotected humans inside the danger zone.
+Nov/11: Add EmergencyAlert functional interface for doctor rally behaviour
+- Created custom @FunctionalInterface EmergencyAlert returning Optional<Point>.
+- Passed a stream-based lambda in GamePanel.step() so nearby humans rally toward cure-carrying doctors.
