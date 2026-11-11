@@ -10,6 +10,10 @@ public class Human extends Entity implements Infectable {
 
     private List<Cure> visibleCures = new ArrayList<>();
     private List<Point> safeZones = new ArrayList<>();
+    private EmergencyAlert emergencyAlert = (hx, hy) -> java.util.Optional.empty();
+    public void setEmergencyAlert(EmergencyAlert alert) {
+    this.emergencyAlert = alert;
+}
     private static final int DETECTION_RADIUS = 5;
 
     private static final MovementStrategy<Human> DELIVER_CURE_STRATEGY = new DeliverCureStrategy();
@@ -84,13 +88,20 @@ public class Human extends Entity implements Infectable {
 
             if (dangerousConditions && !safeZones.isEmpty() && (zombieNear || !cureNear)) {
                 strategy = SEEK_SHELTER_STRATEGY;
-            } else if (zombieNear) {
+            }else if (zombieNear) {
                 strategy = FLEE_STRATEGY;
-            } else if (cureNear) {
+            }else if (cureNear) {
                 strategy = SEEK_CURE_STRATEGY;
-            } else {
-                strategy = WANDER_STRATEGY;
+            }else if (emergencyAlert.findNearestDoctor(gridX, gridY).isPresent()) {
+                Point docPos = emergencyAlert.findNearestDoctor(gridX, gridY).get();
+                int[] step = PathFinder.findNextStep(gridX, gridY, docPos.x, docPos.y, blocked, gridWidth);
+            if (step != null && !Entity.isTileOccupiedBy(Human.class, step[0], step[1], allEntities, this)) {
+                planPosition(step[0], step[1]);
             }
+                return;
+            } else {
+    strategy = WANDER_STRATEGY;
+}
         }
         strategy.move(this, gridWidth, gridHeight, allEntities, blocked);
     }

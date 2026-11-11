@@ -305,12 +305,18 @@ public class GamePanel extends JPanel {
         // Nobody actually moves yet. Everyone sees the same snapshot.
         // Giving humans their visible cures happens first, sequentially.
         entities.stream()
-             .filter(e -> e instanceof Human)
-             .forEach(e -> {
-                 Human h = (Human) e;
-                 h.setVisibleCures(cures);
-                 h.setSafeZones(safeZones);
-             });
+                .filter(e -> e instanceof Human)
+                .forEach(e -> {
+                    Human h = (Human) e;
+                    h.setVisibleCures(cures);
+                    h.setSafeZones(safeZones);
+                    h.setEmergencyAlert((hx, hy) -> entities.stream()
+                            .filter(other -> other instanceof Human && ((Human) other).hasCure() && other != h)
+                            .map(other -> new Point(other.getX(), other.getY()))
+                            .filter(p -> Math.abs(p.x - hx) + Math.abs(p.y - hy) <= 6
+                                      && Math.abs(p.x - hx) + Math.abs(p.y - hy) > 1)
+                            .min(java.util.Comparator.comparingInt(p -> Math.abs(p.x - hx) + Math.abs(p.y - hy))));
+                });
 
         // The decisions themselves run as a parallel stream. This is thread-safe because:
         //  - every entity only READS the shared snapshot, cures and blocked grid, none of
