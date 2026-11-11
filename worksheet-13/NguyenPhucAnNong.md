@@ -1,9 +1,9 @@
 # COMP2000 Worksheet 2 — Final Submission
 
-**Student name:** 
+**Student name:** Nguyen Phuc An Nong
 
 **GitHub repo URL:** (your own fork of your team's repository, not your team's URL)
-
+https://github.com/terrisixzain/COMP2000-Assignment1/tree/main
 ---
 
 ## 1. Design Patterns
